@@ -1,0 +1,30 @@
+<!doctype html>
+<htm lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb"><title>cnt_cp</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#home"><span class="brand-mark">⌁</span><span><b>cnt_cp</b><small>COMPUTER NETWORKS LAB</small></span></a>
+      <div class="side-label">WORKSPACE</div>
+      <nav id="nav">
+        <a href="#home" data-page="home"><span>⌂</span> Overview</a>
+        <a href="#conference" data-page="conference"><span>◉</span> Conference</a>
+        <a href="#network" data-page="network"><span>⌁</span> Network control</a>
+        <a href="#simulation" data-page="simulation"><span>◈</span> Network simulation</a>
+        <a href="#messages" data-page="messages"><span>▤</span> Messages</a>
+      </nav>
+      <div class="sidebar-bottom"><div class="live-dot"></div><div><b>Signaling service</b><small id="serverState">Checking connection…</small></div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar"><div class="crumb"><span>Workspace</span><b id="pageTitle">Overview</b></div><div class="top-right"><a href="/download-zip" class="pill" download style="text-decoration:none; cursor:pointer; color:inherit; font-weight:600;"><span>📥</span> Download cnt_cp.zip</a><span class="pill"><i class="green-dot"></i> WebRTC ready</span><div class="user-avatar" id="topAvatar">N</div></div></header>
+      <div id="content" class="content"></div>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
