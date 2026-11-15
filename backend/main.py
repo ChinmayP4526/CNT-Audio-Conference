@@ -50,7 +50,8 @@ async def ice_servers(response: Response):
     """Return public STUN configuration and short-lived TURN REST credentials."""
     response.headers["Cache-Control"] = "no-store"
     stun_urls = [value.strip() for value in os.getenv(
-        "ICE_STUN_URLS", "stun:stun.l.google.com:19302"
+        "ICE_STUN_URLS",
+"stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478"
     ).split(",") if value.strip()]
     servers = [{"urls": url} for url in stun_urls]
     turn_urls = [value.strip() for value in os.getenv("TURN_URLS", "").split(",") if value.strip()]
