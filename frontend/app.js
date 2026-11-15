@@ -1050,3 +1050,49 @@ setInterval(() => {
   if (state.page === "home" && state.simulated) show();
 }, 3000);
 show();
+
+window.debugAudio = async function () {
+    for (const [id, pc] of state.pcs) {
+        const peer = state.peers.find(p => p.id === id);
+        const stats = await pc.getStats();
+
+        const audioStats = [...stats.values()]
+            .filter(r =>
+                (r.type === "inbound-rtp" ||
+                 r.type === "outbound-rtp") &&
+                (r.kind === "audio" || r.mediaType === "audio")
+            )
+            .map(r => ({
+                direction: r.type,
+                packets: r.packetsReceived ?? r.packetsSent,
+                bytes: r.bytesReceived ?? r.bytesSent,
+                packetsLost: r.packetsLost ?? 0
+            }));
+
+        console.log("PEER:", peer?.name || id);
+        console.log("Connection:", pc.connectionState);
+        console.log("ICE:", pc.iceConnectionState);
+
+        console.log("LOCAL AUDIO SENDERS:",
+            pc.getSenders()
+                .filter(s => s.track?.kind === "audio")
+                .map(s => ({
+                    enabled: s.track.enabled,
+                    muted: s.track.muted,
+                    readyState: s.track.readyState
+                }))
+        );
+
+        console.log("REMOTE AUDIO RECEIVERS:",
+            pc.getReceivers()
+                .filter(r => r.track.kind === "audio")
+                .map(r => ({
+                    muted: r.track.muted,
+                    readyState: r.track.readyState
+                }))
+        );
+
+        console.table(audioStats);
+    }
+};
+
