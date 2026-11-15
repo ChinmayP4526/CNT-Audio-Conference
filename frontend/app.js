@@ -438,7 +438,6 @@ async function connect(create = false) {
       }
     };
     sessionStorage.setItem("name", state.name);
-    location.hash = "conference";
   } catch (e) {
     state.ws = null;
     $("#serverState").textContent = "Backend unavailable";
@@ -474,8 +473,15 @@ function onMessage(m) {
     });
     const peers = m.participants || [];
     state.peers = peers;
-    peers.forEach((p) => makePeer(p.id));
+
+    // Create connections only to other participants.
+    peers.forEach((p) => {
+      if (p.id !== state.selfId) {
+        makePeer(p.id);
+      }
+    });
     beginStats();
+    location.hash = "conference";
     show();
     return;
   }
