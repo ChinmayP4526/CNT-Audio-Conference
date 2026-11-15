@@ -2,9 +2,6 @@
 from __future__ import annotations
 
 import json
-import base64
-import hashlib
-import hmac
 import logging
 import os
 import re
@@ -13,8 +10,17 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
-from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect
+import httpx
+from dotenv import load_dotenv
+load_dotenv()
+from fastapi import (
+    FastAPI,
+    Response,
+    Request,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -45,32 +51,85 @@ async def index():
 async def health():
     return {"status": "ok", "rooms": len(rooms), "participants": sum(map(len, rooms.values()))}
 
+
 @app.get("/api/ice-servers")
-async def ice_servers(response: Response):
-    """Return public STUN configuration and short-lived TURN REST credentials."""
+async def ice_servers(request: Request, response: Response):
+    """Generate short-lived STUN/TURN credentials through Turnix."""
+
     response.headers["Cache-Control"] = "no-store"
-    stun_urls = [value.strip() for value in os.getenv(
-        "ICE_STUN_URLS",
-"stun:stun.l.google.com:19302,stun:stun.cloudflare.com:3478"
-    ).split(",") if value.strip()]
-    servers = [{"urls": url} for url in stun_urls]
-    turn_urls = [value.strip() for value in os.getenv("TURN_URLS", "").split(",") if value.strip()]
-    secret = os.getenv("TURN_SHARED_SECRET", "")
-    result = {"iceServers": servers, "turnAvailable": False, "expiresAt": None}
-    if turn_urls and secret:
-        try:
-            ttl = int(os.getenv("TURN_CREDENTIAL_TTL_SECONDS", "600"))
-        except ValueError:
-            ttl = 600
-        ttl = max(60, min(ttl, 86400))
-        username = f"{int(time.time()) + ttl}:{os.getenv('TURN_USERNAME_PREFIX', 'cnt')}"
-        digest = hmac.new(secret.encode("utf-8"), username.encode("utf-8"), hashlib.sha1).digest()
-        credential = base64.b64encode(digest).decode("ascii")
-        servers.append({"urls": turn_urls, "username": username, "credential": credential})
-        result.update(turnAvailable=True, expiresAt=int(username.split(":", 1)[0]))
-    elif turn_urls:
-        logger.warning("TURN_URLS is set but TURN_SHARED_SECRET is missing; TURN will not be advertised")
-    return result
+
+    token = os.getenv("TURNIX_API_TOKEN")
+    if not token:
+        raise HTTPException(
+            status_code=503,
+            detail="TURNIX_API_TOKEN is not configured on the server."
+        )
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    # Forward the connecting user's IP for Turnix region selection.
+    forwarded_for = request.headers.get("x-forwarded-for")
+    client_ip = (
+        forwarded_for.split(",")[0].strip()
+        if forwarded_for
+        else (request.client.host if request.client else "")
+    )
+
+    if client_ip:
+        headers["X-TURN-CLIENT-IP"] = client_ip
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            turnix_response = await client.post(
+                "https://turnix.io/api/v1/credentials/ice",
+                headers=headers,
+                json={"ttl": 3600},
+            )
+
+        if not turnix_response.is_success:
+            logger.error(
+                "Turnix API returned HTTP %s: %s",
+                turnix_response.status_code,
+                turnix_response.text[:500],
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Could not obtain TURN credentials from Turnix."
+            )
+
+        data = turnix_response.json()
+        ice_servers = data.get("iceServers")
+
+        if not isinstance(ice_servers, list) or not ice_servers:
+            raise HTTPException(
+                status_code=502,
+                detail="Turnix returned an invalid ICE configuration."
+            )
+
+        logger.info("Successfully obtained temporary Turnix ICE credentials.")
+
+        return {
+            "iceServers": ice_servers,
+            "turnAvailable": True,
+            "expiresAt": data.get("expiresAt"),
+        }
+
+    except httpx.TimeoutException:
+        logger.exception("Turnix API request timed out.")
+        raise HTTPException(
+            status_code=504,
+            detail="Turnix credential request timed out."
+        )
+
+    except httpx.RequestError:
+        logger.exception("Could not connect to Turnix API.")
+        raise HTTPException(
+            status_code=502,
+            detail="Could not connect to the TURN credential service."
+        )
 
 def snapshot(room: str) -> list[dict[str, Any]]:
     return [{"id": p.id, "name": p.name, "muted": p.muted, "speaking": p.speaking,
